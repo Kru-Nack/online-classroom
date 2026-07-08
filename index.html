@@ -34,7 +34,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet" />
 
   <!-- ไฟล์สไตล์ของเรา -->
-  <link rel="stylesheet" href="style.css?v=22" />
+  <link rel="stylesheet" href="style.css?v=24" />
   <link rel="icon" href="favicon-64.png" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>" />
 
@@ -273,8 +273,14 @@
       <button class="btn btn-ghost" id="btnGames" title="เกมเสริมการเรียนรู้">
         🎮 <span class="btn-label">เกม</span>
       </button>
+      <button class="btn btn-ghost student-only" id="btnStudentLogin" title="เข้าสู่ระบบนักเรียน">
+        👤 <span class="btn-label" id="btnStudentLoginLabel">เข้าสู่ระบบ</span>
+      </button>
       <button class="btn btn-ghost student-only" id="btnMe" title="ผลงาน/เกียรติบัตรของฉัน">
         🎓 <span class="btn-label">ของฉัน</span>
+      </button>
+      <button class="btn btn-ghost teacher-only" id="btnMembers" title="จัดการสมาชิกนักเรียน">
+        👥 <span class="btn-label">สมาชิก</span>
       </button>
       <button class="btn btn-ghost teacher-only" id="btnSettings" title="ตั้งค่าเว็บไซต์">
         ⚙️ <span class="btn-label">ตั้งค่าเว็บ</span>
@@ -314,7 +320,7 @@
   <div class="toast-wrap" id="toastWrap"></div>
 
   <!-- ไฟล์ JavaScript หลัก (ใส่ไว้ท้ายสุดเพื่อให้โหลดหน้าก่อน) -->
-  <script src="script.js?v=22"></script>
+  <script src="script.js?v=24"></script>
 
   <!-- ===================== ลงทะเบียน Service Worker (ทำให้ติดตั้งเป็นแอปได้) ===================== -->
   <script>
@@ -325,6 +331,28 @@
         });
       });
     }
+  </script>
+
+  <!-- ===================== ตัวกันเปิดดูซอร์สโค้ด (กันคนทั่วไป/นักเรียน) =====================
+       หมายเหตุ: เว็บทุกเว็บซ่อนโค้ด 100% ไม่ได้ แต่ข้อมูลสำคัญ (รหัสครู เฉลย รหัสสมาชิก)
+       อยู่ฝั่งเซิร์ฟเวอร์ทั้งหมด โค้ดหน้าเว็บจึงไม่มีความลับรั่วไหล -->
+  <script>
+    (function () {
+      // ปิดเมนูคลิกขวา
+      document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+      // ปิดคีย์ลัดเปิดเครื่องมือนักพัฒนา/ดูซอร์ส: F12, Ctrl+U, Ctrl+S, Ctrl+Shift+I/J/C
+      document.addEventListener('keydown', function (e) {
+        var k = (e.key || '').toLowerCase();
+        if (e.key === 'F12') { e.preventDefault(); return; }
+        if (e.ctrlKey && !e.shiftKey && (k === 'u' || k === 's')) { e.preventDefault(); return; }
+        if (e.ctrlKey && e.shiftKey && (k === 'i' || k === 'j' || k === 'c')) { e.preventDefault(); return; }
+      });
+      // คำเตือนใน console (กันคนถูกหลอกให้วางโค้ดแปลกปลอม = self-XSS)
+      try {
+        console.log('%cหยุดก่อน!', 'color:#ef4444;font-size:40px;font-weight:bold');
+        console.log('%cถ้ามีใครบอกให้คุณวางโค้ดที่นี่ อย่าทำเด็ดขาด อาจถูกขโมยข้อมูลได้', 'font-size:16px');
+      } catch (err) {}
+    })();
   </script>
 </body>
 </html>
