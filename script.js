@@ -441,7 +441,12 @@ function gradeParamOf(sub) { return sub && String(sub.grade_id || '').trim() ? s
 function subjectsOfGrade(param) {
   if (String(param).indexOf('gname:') === 0) {
     const name = param.slice(6);
-    return state.subjects.filter(s => !String(s.grade_id || '').trim() && String(s.grade || '').trim() === name);
+    // ชั้นเสมือน: วิชาที่ชื่อชั้นตรงกัน และไม่มี grade_id หรือ grade_id ชี้ไปชั้นที่ไม่มีอยู่แล้ว
+    return state.subjects.filter(s => {
+      const gid = String(s.grade_id || '').trim();
+      const orphan = !gid || !findGrade(gid);
+      return orphan && String(s.grade || '').trim() === name;
+    });
   }
   const g = findGrade(param);
   const name = g ? String(g.grade_name || '').trim() : '';
