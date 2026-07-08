@@ -34,7 +34,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet" />
 
   <!-- ไฟล์สไตล์ของเรา -->
-  <link rel="stylesheet" href="style.css?v=25" />
+  <link rel="stylesheet" href="style.css?v=26" />
   <link rel="icon" href="favicon-64.png" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>" />
 
@@ -269,26 +269,65 @@
     </a>
 
     <div class="topbar-actions">
-      <!-- ปุ่มเหล่านี้จะแสดง/ซ่อนตามสถานะการเข้าสู่ระบบ (จัดการโดย script.js) -->
-      <button class="btn btn-ghost" id="btnGames" title="เกมเสริมการเรียนรู้">
-        🎮 <span class="btn-label">เกม</span>
+      <!-- ★ ปุ่มเมนู 3 ขีด (กดเปิด/ปิดแผงเมนู) -->
+      <button class="menu-toggle" id="menuToggle" aria-label="เปิดเมนู" aria-expanded="false">
+        <span class="mt-bar"></span><span class="mt-bar"></span><span class="mt-bar"></span>
       </button>
-      <button class="btn btn-ghost student-only" id="btnStudentLogin" title="เข้าสู่ระบบนักเรียน">
-        👤 <span class="btn-label" id="btnStudentLoginLabel">เข้าสู่ระบบ</span>
-      </button>
-      <button class="btn btn-ghost student-only" id="btnMe" title="ผลงาน/เกียรติบัตรของฉัน">
-        🎓 <span class="btn-label">ของฉัน</span>
-      </button>
-      <button class="btn btn-ghost teacher-only" id="btnMembers" title="จัดการสมาชิกนักเรียน">
-        👥 <span class="btn-label">สมาชิก</span>
-      </button>
-      <button class="btn btn-ghost teacher-only" id="btnSettings" title="ตั้งค่าเว็บไซต์">
-        ⚙️ <span class="btn-label">ตั้งค่าเว็บ</span>
-      </button>
-      <button class="btn btn-ghost" id="btnLogin">🔑 <span class="btn-label">เข้าสู่ระบบครู</span></button>
-      <button class="btn btn-ghost teacher-only" id="btnLogout">🚪 <span class="btn-label">ออกจากระบบ</span></button>
+
+      <!-- ★ แผงเมนูเลื่อนลง — ปุ่มเดิมทั้งหมดย้ายมาอยู่ในนี้ (ID เดิม ระบบเดิมทำงานต่อได้) -->
+      <nav class="main-menu" id="mainMenu" aria-hidden="true">
+        <div class="menu-head">📚 เมนู</div>
+        <button class="btn menu-item" onclick="location.hash=''">🏠 <span class="btn-label">หน้าหลัก</span></button>
+        <button class="btn menu-item" id="btnGames" title="เกมเสริมการเรียนรู้">
+          🎮 <span class="btn-label">เกมเสริมการเรียนรู้</span>
+        </button>
+        <button class="btn menu-item student-only" id="btnStudentLogin" title="เข้าสู่ระบบนักเรียน">
+          👤 <span class="btn-label" id="btnStudentLoginLabel">เข้าสู่ระบบ</span>
+        </button>
+        <button class="btn menu-item student-only" id="btnMe" title="ผลงาน/เกียรติบัตรของฉัน">
+          🎓 <span class="btn-label">ของฉัน</span>
+        </button>
+        <button class="btn menu-item teacher-only" id="btnMembers" title="จัดการสมาชิกนักเรียน">
+          👥 <span class="btn-label">สมาชิก</span>
+        </button>
+        <button class="btn menu-item teacher-only" id="btnSettings" title="ตั้งค่าเว็บไซต์">
+          ⚙️ <span class="btn-label">ตั้งค่าเว็บ</span>
+        </button>
+        <div class="menu-divider"></div>
+        <button class="btn menu-item menu-teacher" id="btnLogin">🔑 <span class="btn-label">เข้าสู่ระบบครู</span></button>
+        <button class="btn menu-item menu-teacher teacher-only" id="btnLogout">🚪 <span class="btn-label">ออกจากระบบ</span></button>
+      </nav>
     </div>
   </header>
+
+  <!-- ★ ตัวเปิด/ปิดเมนู 3 ขีด: เลือกเมนูแล้วพับเก็บอัตโนมัติ / กดนอกเมนูก็ปิด -->
+  <script>
+    (function () {
+      var toggle = document.getElementById('menuToggle');
+      var menu = document.getElementById('mainMenu');
+      function setOpen(open) {
+        menu.classList.toggle('open', open);
+        toggle.classList.toggle('open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        menu.setAttribute('aria-hidden', open ? 'false' : 'true');
+      }
+      toggle.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setOpen(!menu.classList.contains('open'));
+      });
+      // เลือกเมนูข้อไหนก็ตาม -> ปิดแผงเมนูทันที (ค่อยกด 3 ขีดใหม่ถ้าต้องการอีก)
+      menu.addEventListener('click', function (e) {
+        if (e.target.closest('button, a')) setOpen(false);
+      });
+      // กดที่อื่นนอกเมนู หรือกด Esc -> ปิด
+      document.addEventListener('click', function (e) {
+        if (!e.target.closest('.topbar-actions')) setOpen(false);
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') setOpen(false);
+      });
+    })();
+  </script>
 
   <!-- ป้ายบอกสถานะ "โหมดครู" เมื่อเข้าสู่ระบบแล้ว -->
   <div class="teacher-banner teacher-only" id="teacherBanner">
@@ -320,7 +359,7 @@
   <div class="toast-wrap" id="toastWrap"></div>
 
   <!-- ไฟล์ JavaScript หลัก (ใส่ไว้ท้ายสุดเพื่อให้โหลดหน้าก่อน) -->
-  <script src="script.js?v=25"></script>
+  <script src="script.js?v=26"></script>
 
   <!-- ===================== ลงทะเบียน Service Worker (ทำให้ติดตั้งเป็นแอปได้) ===================== -->
   <script>
