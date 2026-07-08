@@ -748,6 +748,51 @@ body.game-open { overflow: hidden; }
 body.is-teacher .link-tools { display: flex; }
 
 /* ============================================================================
+   ★ ผลการค้นหาข้ามทุกชั้น (หน้าแรก)
+   ============================================================================ */
+.search-list { display: flex; flex-direction: column; gap: 8px; margin: -8px 0 22px; }
+.search-item { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 11px 14px; box-shadow: var(--shadow); transition: border-color .15s, transform .15s; }
+.search-item:hover { border-color: var(--primary); transform: translateX(3px); }
+.search-item .si-ic { font-size: 1.3rem; flex-shrink: 0; }
+.search-item .si-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.search-item .si-title { font-family: 'Kanit', sans-serif; font-weight: 600; }
+.search-item .si-path { color: var(--ink-soft); font-size: .8rem; }
+.search-item .si-go { color: var(--primary); font-weight: 700; }
+.search-empty { color: var(--ink-soft); margin: -8px 0 22px; padding: 10px 14px; }
+
+/* ============================================================================
+   ★ แถบนำทางท้ายบทเรียน (บทก่อนหน้า / หน้าหน่วย / บทถัดไป)
+   ============================================================================ */
+.lesson-nav { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; margin: 26px 0 10px; align-items: stretch; }
+.ln-btn { display: flex; flex-direction: column; justify-content: center; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 16px; box-shadow: var(--shadow); transition: border-color .15s, transform .15s; }
+.ln-btn:hover { border-color: var(--primary); transform: translateY(-2px); }
+.ln-btn.ln-empty { visibility: hidden; }
+.ln-btn .ln-dir { font-family: 'Kanit', sans-serif; font-weight: 600; color: var(--primary); font-size: .85rem; }
+.ln-btn .ln-name { color: var(--ink-soft); font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+.ln-next { text-align: right; align-items: flex-end; }
+.ln-up { align-items: center; justify-content: center; font-family: 'Kanit', sans-serif; font-weight: 600; color: var(--ink); }
+@media (max-width: 640px) {
+  .lesson-nav { grid-template-columns: 1fr; }
+  .ln-btn.ln-empty { display: none; }
+  .ln-next { text-align: left; align-items: flex-start; }
+}
+
+/* ============================================================================
+   ★ ระบบสมาชิกนักเรียน
+   ============================================================================ */
+.vg-login { display: flex; gap: 10px; flex-wrap: wrap; }
+.vg-login .btn { flex: 1; justify-content: center; min-width: 160px; }
+.member-group { font-family: 'Kanit', sans-serif; font-weight: 600; margin: 22px 0 10px; }
+.member-empty { color: var(--ink-soft); margin-bottom: 10px; }
+.member-table .roster-row { grid-template-columns: 1fr 86px 54px 150px 150px; }
+.member-sub { color: var(--ink-soft); font-size: .78rem; font-weight: 400; }
+.member-act { display: flex; gap: 6px; justify-content: flex-end; }
+@media (max-width: 680px) {
+  .member-table .roster-row { grid-template-columns: 1fr; gap: 4px; }
+  .member-act { justify-content: flex-start; }
+}
+
+/* ============================================================================
    เคารพการตั้งค่า "ลดการเคลื่อนไหว" ของผู้ใช้ (เพื่อการเข้าถึง)
    ============================================================================ */
 @media (prefers-reduced-motion: reduce) {
