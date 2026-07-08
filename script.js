@@ -42,8 +42,31 @@ function loaderSet(p)  { try { if (window.AppLoader && window.AppLoader.set)    
 function loaderDone()  { try { if (window.AppLoader && window.AppLoader.finish) window.AppLoader.finish(); } catch (e) {} }
 
 // --- ตัวช่วยจำ "ตัวตนนักเรียน" และ "บทที่ดูจบแล้ว" ไว้ในเครื่อง (localStorage) ---
-// (ใช้เพื่อความสะดวก ไม่ต้องพิมพ์ชื่อซ้ำ และจำว่าดูบทไหนจบไปแล้ว)
+
+// ★ บัญชีสมาชิก (ได้จากการล็อกอิน) — มี id จริงจากเซิร์ฟเวอร์
+function getStudentAccount() {
+  try { return JSON.parse(localStorage.getItem('cr_account') || 'null'); } catch (e) { return null; }
+}
+function saveStudentAccount(acc) {
+  try { localStorage.setItem('cr_account', JSON.stringify(acc)); } catch (e) {}
+}
+function clearStudentAccount() {
+  try { localStorage.removeItem('cr_account'); } catch (e) {}
+}
+function isLoggedIn() { const a = getStudentAccount(); return !!(a && a.id); }
+
+// ตัวตนนักเรียน: ถ้าล็อกอินแล้วใช้ข้อมูลบัญชี (แม่นสุด) ไม่ได้ล็อกอินใช้ที่เคยพิมพ์ไว้
 function getStudentInfo() {
+  const acc = getStudentAccount();
+  if (acc && acc.id) {
+    return {
+      student_id: acc.id,
+      student_name: acc.student_name || '',
+      student_class: acc.student_class || '',
+      student_no: acc.student_no || '',
+      school: acc.school || ''
+    };
+  }
   try { return JSON.parse(localStorage.getItem('cr_student') || '{}'); } catch (e) { return {}; }
 }
 function saveStudentInfo(info) {
@@ -324,6 +347,19 @@ $('#btnLogout').onclick = logout;
 $('#btnSettings').onclick = () => { location.hash = 'view=settings'; };
 $('#btnMe').onclick = () => { location.hash = 'view=me'; };
 $('#btnGames').onclick = () => { location.hash = 'view=games'; };
+$('#btnMembers').onclick = () => { location.hash = 'view=members'; };
+$('#btnStudentLogin').onclick = () => {
+  if (isLoggedIn()) location.hash = 'view=me';   // ล็อกอินแล้ว -> ไปหน้าของฉัน
+  else openStudentLogin();
+};
+
+// อัปเดตป้ายปุ่มนักเรียนตามสถานะล็อกอิน (เรียกหลังล็อกอิน/ออก และตอนเปิดเว็บ)
+function updateStudentUI() {
+  const acc = getStudentAccount();
+  const label = document.getElementById('btnStudentLoginLabel');
+  if (label) label.textContent = (acc && acc.id) ? ('สวัสดี ' + String(acc.student_name || '').split(' ')[0]) : 'เข้าสู่ระบบ';
+}
+updateStudentUI();
 $('#brandLink').onclick = (e) => { e.preventDefault(); location.hash = ''; };
 
 /* ============================================================================
@@ -351,6 +387,7 @@ async function router() {
   const params = new URLSearchParams(location.hash.slice(1));
   if (params.get('view') === 'settings') return renderSettings();
   if (params.get('view') === 'me') return renderMyPage();
+  if (params.get('view') === 'members') return renderMembersPage();
   if (params.get('view') === 'games') return renderGamesPage();
   if (params.get('grade')) return renderGrade(params.get('grade'));
   if (params.get('unit')) return renderUnit(params.get('unit'));
@@ -471,6 +508,13 @@ async function renderHome() {
   // ชั้นเรียนที่จะแสดง (จากแท็บ Grades + เผื่อชั้นที่ยังไม่ได้ย้าย)
   const grades = homeGradeList();
 
+  // ช่องค้นหาข้ามทุกชั้น: พิมพ์แล้วเจอทั้งวิชา หน่วย บทเรียน กดแล้วกระโดดไปหน้านั้นเลย
+  const searchBar = `
+    <div class="filter-bar">
+      <input id="globalSearch" class="search-input" type="search" placeholder="🔍 ค้นหาบทเรียน หน่วย หรือวิชา... (พิมพ์แล้วกดผลลัพธ์ได้เลย)" />
+    </div>
+    <div id="searchResults"></div>`;
+
   loaderSet(97);                     // กำลังจะวาดหน้าแล้ว
   app.innerHTML = `
     ${heroHtml}
@@ -481,6 +525,7 @@ async function renderHome() {
       <h2>เลือกระดับชั้น <span class="count">(${grades.length})</span></h2>
       <button class="btn btn-primary teacher-only" onclick="openGradeForm()">➕ เพิ่มชั้นเรียน</button>
     </div>
+    ${searchBar}
     ${grades.length
       ? `<div class="grid">${grades.map((g, i) => gradeCard(g, i)).join('')}</div>`
       : viewEmpty('🌱', 'ยังไม่มีชั้นเรียน', isTeacher() ? 'กดปุ่ม "เพิ่มชั้นเรียน" เพื่อสร้างชั้นแรก แล้วค่อยเพิ่มวิชาเข้าไป' : 'คุณครูกำลังเตรียมบทเรียนอยู่ แวะมาใหม่นะ')}
@@ -494,6 +539,57 @@ async function renderHome() {
   loaderDone();          // โหลดเสร็จสมบูรณ์ -> หน้าจอโหลดวิ่งไป 100% แล้วเฟดหาย
   animateStats();        // ทำเลขสถิติวิ่งขึ้น
   startHeroRotation();   // เริ่มสลับรูปปกอัตโนมัติ (ถ้ามีหลายรูป)
+  setupGlobalSearch();   // ผูกช่องค้นหาข้ามทุกชั้น
+}
+
+/* ---- ★ ค้นหาข้ามทุกชั้น (ชั้น/วิชา/หน่วย/บทเรียน) บนหน้าแรก ---- */
+function setupGlobalSearch() {
+  const input = document.getElementById('globalSearch');
+  const box = document.getElementById('searchResults');
+  if (!input || !box) return;
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    if (q.length < 2) { box.innerHTML = ''; return; }   // เริ่มค้นเมื่อพิมพ์ 2 ตัวขึ้นไป
+
+    const hit = (s) => String(s || '').toLowerCase().includes(q);
+    const results = [];
+
+    // บทเรียน (แสดงเส้นทาง วิชา › หน่วย)
+    (state.lessons || []).forEach(l => {
+      if ((l.status || 'active') !== 'active' && !isTeacher()) return;
+      if (hit(l.lesson_name) || hit(l.description)) {
+        const sub = findSubject(l.subject_id) || {};
+        const u = findUnit(l.unit_id);
+        results.push({ icon: (l.link_type === 'video' ? '▶️' : '📖'), title: l.lesson_name, path: [sub.grade, sub.subject_name, u ? u.unit_name : ''].filter(Boolean).join(' › '), hash: 'lesson=' + l.id });
+      }
+    });
+    // หน่วยการเรียน
+    (state.units || []).forEach(u => {
+      if ((u.status || 'active') !== 'active' && !isTeacher()) return;
+      if (hit(u.unit_name) || hit(u.description)) {
+        const sub = findSubject(u.subject_id) || {};
+        results.push({ icon: '📦', title: u.unit_name, path: [sub.grade, sub.subject_name].filter(Boolean).join(' › '), hash: 'unit=' + encodeURIComponent(u.id) });
+      }
+    });
+    // วิชา
+    (state.subjects || []).forEach(s => {
+      if ((s.status || 'active') !== 'active' && !isTeacher()) return;
+      if (hit(s.subject_name) || hit(s.grade)) {
+        results.push({ icon: s.icon || '📘', title: s.subject_name + ' ' + (s.grade || ''), path: '', hash: 'subject=' + s.id });
+      }
+    });
+
+    if (!results.length) {
+      box.innerHTML = `<div class="search-empty">ไม่พบ "${esc(input.value.trim())}" ลองคำอื่นดูนะ</div>`;
+      return;
+    }
+    box.innerHTML = `<div class="search-list">${results.slice(0, 12).map(r => `
+      <a class="search-item" href="#${r.hash}">
+        <span class="si-ic">${esc(r.icon)}</span>
+        <span class="si-main"><span class="si-title">${esc(r.title)}</span>${r.path ? `<span class="si-path">${esc(r.path)}</span>` : ''}</span>
+        <span class="si-go">›</span>
+      </a>`).join('')}</div>`;
+  });
 }
 
 // ชั้นเรียนที่จะโชว์หน้าแรก: ชั้นจริง (แท็บ Grades) + ชั้นเสมือนจากวิชาที่ยังไม่ผูกชั้น (กันหาย)
@@ -1253,6 +1349,198 @@ function goUnitOfLesson(subjectId, unitId) {
   location.hash = 'unit=' + encodeURIComponent(unitId ? unitId : ('none:' + subjectId));
 }
 
+// ★ แถบนำทางท้ายบทเรียน: บทก่อนหน้า / กลับหน้าหน่วย / บทถัดไป (ภายในหน่วยเดียวกัน)
+function lessonNavHtml(lesson) {
+  // บทพี่น้องในหน่วยเดียวกัน (บทที่ไม่จัดหน่วย = กลุ่มบทเรียนทั่วไปของวิชานั้น)
+  let siblings = String(lesson.unit_id || '').trim()
+    ? lessonsOfUnit(lesson.unit_id)
+    : lessonsOfSubject(lesson.subject_id).filter(l => !String(l.unit_id || '').trim());
+  siblings = siblings.filter(l => isTeacher() || (l.status || 'active') === 'active').sort(byOrder);
+
+  const idx = siblings.findIndex(l => l.id === lesson.id);
+  const prev = idx > 0 ? siblings[idx - 1] : null;
+  const next = (idx >= 0 && idx < siblings.length - 1) ? siblings[idx + 1] : null;
+  const unitHash = 'unit=' + encodeURIComponent(lesson.unit_id ? lesson.unit_id : ('none:' + lesson.subject_id));
+
+  return `
+    <nav class="lesson-nav">
+      ${prev
+        ? `<a class="ln-btn ln-prev" href="#lesson=${esc(prev.id)}"><span class="ln-dir">← บทก่อนหน้า</span><span class="ln-name">${esc(prev.lesson_name)}</span></a>`
+        : `<span class="ln-btn ln-empty"></span>`}
+      <a class="ln-btn ln-up" href="#${unitHash}">📦 หน้าหน่วย</a>
+      ${next
+        ? `<a class="ln-btn ln-next" href="#lesson=${esc(next.id)}"><span class="ln-dir">บทถัดไป →</span><span class="ln-name">${esc(next.lesson_name)}</span></a>`
+        : `<span class="ln-btn ln-empty"></span>`}
+    </nav>`;
+}
+
+/* ============================================================================
+   11.4) ★ ระบบสมาชิกนักเรียน: ล็อกอิน / สมัครสมาชิก / หน้าจัดการของครู
+   ============================================================================ */
+
+// ฟอร์มเข้าสู่ระบบนักเรียน
+function openStudentLogin() {
+  openModal('👤 เข้าสู่ระบบนักเรียน', `
+    <form id="stuLoginForm" novalidate>
+      <div class="field"><label>ชื่อผู้ใช้</label><input name="username" autocomplete="username" placeholder="ชื่อผู้ใช้ที่สมัครไว้" /></div>
+      <div class="field"><label>รหัสผ่าน</label><input type="password" name="password" autocomplete="current-password" placeholder="รหัสผ่าน" /></div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">ยกเลิก</button>
+        <button type="submit" class="btn btn-primary">เข้าสู่ระบบ</button>
+      </div>
+      <p class="reg-formhint" style="text-align:center;margin-top:12px">ยังไม่มีบัญชี? <a href="#" onclick="event.preventDefault();openStudentRegister()">สมัครสมาชิกที่นี่</a></p>
+    </form>
+  `);
+  $('#stuLoginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const username = f.elements.username.value.trim();
+    const password = f.elements.password.value;
+    if (!username || !password) { toast('กรอกชื่อผู้ใช้และรหัสผ่านก่อนนะ', 'error'); return; }
+    const btn = f.querySelector('button[type=submit]');
+    btn.disabled = true; btn.textContent = 'กำลังเข้าสู่ระบบ...';
+    try {
+      const acc = await apiPost('studentLogin', { username, password });
+      saveStudentAccount(acc);
+      updateStudentUI();
+      closeModal();
+      toast('สวัสดี ' + (acc.student_name || '') + ' 🎉', 'success');
+      router();   // วาดหน้าใหม่ให้สถานะล่าสุด
+    } catch (err) {
+      toast(err.message, 'error');
+      btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
+    }
+  });
+}
+
+// ฟอร์มสมัครสมาชิก (สมัครแล้วรอครูอนุมัติ)
+function openStudentRegister() {
+  openModal('📝 สมัครสมาชิกนักเรียน', `
+    <form id="stuRegForm" novalidate>
+      <p class="reg-formhint">สมัครได้ทั้งนักเรียนของครู และนักเรียนโรงเรียนอื่น/ผู้สนใจ — <b>หลังสมัครต้องรอคุณครูอนุมัติก่อน</b> จึงจะเข้าสู่ระบบได้</p>
+      <div class="row2">
+        <div class="field"><label>ชื่อผู้ใช้ <span class="req">*</span></label><input name="username" autocomplete="username" placeholder="a-z, 0-9 อย่างน้อย 3 ตัว" /><div class="err">อย่างน้อย 3 ตัว (a-z, 0-9, จุด, ขีด)</div></div>
+        <div class="field"><label>รหัสผ่าน <span class="req">*</span></label><input type="password" name="password" autocomplete="new-password" placeholder="อย่างน้อย 4 ตัว" /><div class="err">อย่างน้อย 4 ตัวอักษร</div></div>
+      </div>
+      <div class="field"><label>ชื่อ-นามสกุล <span class="req">*</span></label><input name="student_name" placeholder="เช่น เด็กหญิงมานี ใจดี" /><div class="err">กรุณากรอกชื่อ-นามสกุล</div></div>
+      <div class="row2">
+        <div class="field"><label>ชั้น/ห้อง</label><input name="student_class" placeholder="เช่น ป.6/1" /></div>
+        <div class="field"><label>เลขที่</label><input name="student_no" placeholder="เช่น 12" /></div>
+      </div>
+      <div class="field"><label>โรงเรียน</label><input name="school" placeholder="เช่น โรงเรียนนิคมสร้างตนเอง 3 (หรือโรงเรียนอื่น)" /><div class="hint">นักเรียนโรงเรียนอื่น/ผู้สนใจ ใส่ชื่อโรงเรียน/หน่วยงานของตัวเองได้เลย</div></div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">ยกเลิก</button>
+        <button type="submit" class="btn btn-accent">📝 สมัครสมาชิก</button>
+      </div>
+      <p class="reg-formhint" style="text-align:center;margin-top:12px">มีบัญชีแล้ว? <a href="#" onclick="event.preventDefault();openStudentLogin()">เข้าสู่ระบบ</a></p>
+    </form>
+  `);
+  $('#stuRegForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const username = f.elements.username.value.trim();
+    const password = f.elements.password.value;
+    const name = f.elements.student_name.value.trim();
+    const okU = /^[a-zA-Z0-9_.-]{3,}$/.test(username);
+    const okP = password.length >= 4;
+    f.elements.username.closest('.field').classList.toggle('invalid', !okU);
+    f.elements.password.closest('.field').classList.toggle('invalid', !okP);
+    f.elements.student_name.closest('.field').classList.toggle('invalid', !name);
+    if (!okU || !okP || !name) return;
+
+    const item = {
+      username, password, student_name: name,
+      student_class: f.elements.student_class.value.trim(),
+      student_no: f.elements.student_no.value.trim(),
+      school: f.elements.school.value.trim()
+    };
+    const btn = f.querySelector('button[type=submit]');
+    btn.disabled = true; btn.textContent = 'กำลังสมัคร...';
+    try {
+      await apiPost('registerStudent', { item });
+      closeModal();
+      openModal('🎉 สมัครเรียบร้อย', `
+        <div class="reg-prompt">
+          <div class="reg-prompt-ic">⏳</div>
+          <p class="reg-prompt-line1"><b>สมัครสมาชิกสำเร็จแล้ว!</b></p>
+          <p class="reg-prompt-line2">รอคุณครูอนุมัติบัญชีก่อนนะ แล้วค่อยกลับมาเข้าสู่ระบบ</p>
+          <p class="reg-prompt-note">ระหว่างรอ ยังดูวิดีโอและเล่นเกมได้ตามปกติ</p>
+        </div>
+        <div class="form-actions" style="justify-content:center">
+          <button type="button" class="btn btn-primary" onclick="closeModal()">เข้าใจแล้ว</button>
+        </div>`);
+    } catch (err) {
+      toast(err.message, 'error');
+      btn.disabled = false; btn.textContent = '📝 สมัครสมาชิก';
+    }
+  });
+}
+
+// ออกจากระบบนักเรียน
+function studentLogout() {
+  clearStudentAccount();
+  updateStudentUI();
+  toast('ออกจากระบบแล้ว', 'success');
+  location.hash = '';
+  router();
+}
+
+// หน้าจัดการสมาชิก (เฉพาะครู): อนุมัติ/ลบ
+async function renderMembersPage() {
+  if (!isTeacher()) { location.hash = ''; return; }
+  loaderSet(25);
+  app.innerHTML = viewSkeleton();
+  let list = [];
+  try { list = await apiPost('getStudents', {}); loaderSet(90); }
+  catch (err) { app.innerHTML = viewError(err.message); loaderDone(); return; }
+
+  const pending = list.filter(s => String(s.status) === 'pending');
+  const approved = list.filter(s => String(s.status) !== 'pending');
+
+  const row = (s) => `
+    <div class="roster-row">
+      <span class="r-name">${esc(s.student_name || '-')}<div class="member-sub">@${esc(s.username || '')}${s.school ? ' · ' + esc(s.school) : ''}</div></span>
+      <span>${esc(s.student_class || '-')}</span>
+      <span>${esc(s.student_no || '-')}</span>
+      <span class="r-date">${esc(formatThaiDateTime(s.date))}</span>
+      <span class="r-act member-act">
+        ${String(s.status) === 'pending' ? `<button class="btn btn-primary btn-sm" onclick="approveMember('${esc(s.id)}')">✅ อนุมัติ</button>` : ''}
+        <button class="btn btn-danger btn-sm" onclick="confirmDeleteMember('${esc(s.id)}','${esc(s.student_name || '')}')">🗑️</button>
+      </span>
+    </div>`;
+
+  app.innerHTML = `
+    <nav class="crumbs"><a href="#">หน้าหลัก</a><span class="sep">›</span><span>จัดการสมาชิก</span></nav>
+    <div class="section-head"><h2>👥 สมาชิกนักเรียน <span class="count">(${list.length} คน)</span></h2></div>
+
+    <h3 class="member-group">⏳ รออนุมัติ (${pending.length})</h3>
+    ${pending.length
+      ? `<div class="roster-table member-table">${pending.map(row).join('')}</div>`
+      : `<p class="member-empty">ไม่มีบัญชีรออนุมัติ</p>`}
+
+    <h3 class="member-group">✅ อนุมัติแล้ว (${approved.length})</h3>
+    ${approved.length
+      ? `<div class="roster-table member-table">${approved.map(row).join('')}</div>`
+      : `<p class="member-empty">ยังไม่มีสมาชิกที่อนุมัติแล้ว</p>`}
+  `;
+  loaderDone();
+}
+
+async function approveMember(id) {
+  try {
+    await apiPost('approveStudent', { id });
+    toast('อนุมัติแล้ว ✅', 'success');
+    renderMembersPage();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+function confirmDeleteMember(id, name) {
+  openConfirm('ต้องการลบสมาชิกนี้ใช่ไหม?', name || '', 'บัญชีนี้จะเข้าสู่ระบบไม่ได้อีก (ประวัติการดูจบที่บันทึกไว้แล้วไม่หาย)', async () => {
+    await apiPost('deleteStudent', { id });
+    renderMembersPage();
+  });
+}
+
 /* ============================================================================
    11.5) หน้า "ของฉัน" — รวมบทที่ดูจบ + เกียรติบัตร (อ่านจากเครื่องนักเรียน)
    ============================================================================ */
@@ -1303,8 +1591,11 @@ async function renderMyPage() {
       <div class="mine-hero-ic">🎓</div>
       <div class="mine-hero-info">
         <h1>ของฉัน</h1>
-        <p class="mine-who">${who}</p>
-        <button class="btn btn-outline btn-sm" onclick="openMyNameForm()">✏️ ${info.student_name ? 'แก้ไขชื่อ' : 'กรอกชื่อ'}</button>
+        <p class="mine-who">${who}${isLoggedIn() && info.school ? ' · ' + esc(info.school) : ''}</p>
+        ${isLoggedIn()
+          ? `<button class="btn btn-outline btn-sm" onclick="studentLogout()">🚪 ออกจากระบบ</button>`
+          : `<button class="btn btn-primary btn-sm" onclick="openStudentLogin()">👤 เข้าสู่ระบบ</button>
+             <button class="btn btn-accent btn-sm" onclick="openStudentRegister()">📝 สมัครสมาชิก</button>`}
       </div>
       <div class="mine-stat">
         <div class="mine-stat-num">${done.length}</div>
@@ -1322,38 +1613,8 @@ async function renderMyPage() {
 function openCertificateById(lessonId) {
   const lesson = findLessonInCache(lessonId);
   if (!lesson) { toast('ไม่พบบทเรียนนี้แล้ว', 'error'); return; }
-  if (!getStudentInfo().student_name) { openMyNameForm(); return; }
+  if (!getStudentInfo().student_name) { openStudentLogin(); return; }
   openCertificate(lesson);
-}
-
-// ฟอร์มแก้ไขชื่อนักเรียน (ในหน้า "ของฉัน")
-function openMyNameForm() {
-  const info = getStudentInfo();
-  openModal('✏️ ข้อมูลของฉัน', `
-    <form id="meForm" novalidate>
-      <p class="reg-formhint">ชื่อนี้จะใช้แสดงบนเกียรติบัตรและรายชื่อของคุณครู</p>
-      <div class="field"><label>ชื่อ-นามสกุล <span class="req">*</span></label><input name="student_name" value="${esc(info.student_name || '')}" placeholder="เช่น เด็กหญิงมานี ใจดี" /><div class="err">กรุณากรอกชื่อ-นามสกุล</div></div>
-      <div class="row2">
-        <div class="field"><label>ชั้น/ห้อง</label><input name="student_class" value="${esc(info.student_class || '')}" placeholder="เช่น ป.6/1" /></div>
-        <div class="field"><label>เลขที่</label><input name="student_no" value="${esc(info.student_no || '')}" placeholder="เช่น 12" /></div>
-      </div>
-      <div class="form-actions">
-        <button type="button" class="btn btn-outline" onclick="closeModal()">ยกเลิก</button>
-        <button type="submit" class="btn btn-primary">บันทึก</button>
-      </div>
-    </form>
-  `);
-  $('#meForm').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const f = e.target;
-    const name = f.elements.student_name.value.trim();
-    f.elements.student_name.closest('.field').classList.toggle('invalid', !name);
-    if (!name) return;
-    saveStudentInfo({ student_name: name, student_class: f.elements.student_class.value.trim(), student_no: f.elements.student_no.value.trim() });
-    closeModal();
-    toast('บันทึกข้อมูลแล้ว', 'success');
-    renderMyPage();
-  });
 }
 
 /* ============================================================================
@@ -1452,6 +1713,8 @@ async function renderLesson(lessonId) {
       <button class="btn btn-accent student-only" onclick="openSubmitWorkForm('${esc(lesson.id)}')">➕ ส่งผลงานของฉัน</button>
     </div>
     ${worksHtml}
+
+    ${lessonNavHtml(lesson)}
   `;
   loaderDone();
 
@@ -1508,12 +1771,25 @@ async function approveWork(id, lessonId) {
 
 // ฟอร์มให้ "นักเรียน" ส่งผลงานเอง (ส่งแล้วรอครูอนุมัติ) — แนบรูปได้
 function openSubmitWorkForm(lessonId) {
+  // ★ ต้องเข้าสู่ระบบก่อนส่งผลงาน (ระบบจะใช้ชื่อจากบัญชี เชื่อถือได้)
+  if (!isLoggedIn()) {
+    openModal('👤 เข้าสู่ระบบก่อนส่งผลงาน', `
+      <div class="reg-prompt">
+        <div class="reg-prompt-ic">🎨</div>
+        <p class="reg-prompt-line2">ส่งผลงานได้เฉพาะสมาชิกที่เข้าสู่ระบบแล้ว เพื่อให้คุณครูรู้ว่าเป็นผลงานของใครจริง ๆ</p>
+      </div>
+      <div class="form-actions" style="justify-content:center">
+        <button type="button" class="btn btn-primary" onclick="openStudentLogin()">👤 เข้าสู่ระบบ</button>
+        <button type="button" class="btn btn-accent" onclick="openStudentRegister()">📝 สมัครสมาชิก</button>
+      </div>`);
+    return;
+  }
   const lesson = findLessonInCache(lessonId) || {};
   const info = getStudentInfo();
   openModal('➕ ส่งผลงานของฉัน', `
     <form id="submitWorkForm" novalidate>
-      <p class="reg-formhint">ส่งผลงานเข้าบท "<b>${esc(lesson.lesson_name || '')}</b>" — ผลงานจะแสดงหลังคุณครูอนุมัติ</p>
-      <div class="field"><label>ชื่อ-นามสกุล <span class="req">*</span></label><input name="student_name" value="${esc(info.student_name || '')}" placeholder="เช่น เด็กหญิงมานี ใจดี" /><div class="err">กรุณากรอกชื่อ</div></div>
+      <p class="reg-formhint">ส่งผลงานเข้าบท "<b>${esc(lesson.lesson_name || '')}</b>" ในชื่อ <b>${esc(info.student_name || '')}</b> — ผลงานจะแสดงหลังคุณครูอนุมัติ</p>
+      <input type="hidden" name="student_name" value="${esc(info.student_name || '')}" />
       <div class="field"><label>ชื่อผลงาน <span class="req">*</span></label><input name="work_title" placeholder="เช่น ภาพวาดเศษส่วน" /><div class="err">กรุณากรอกชื่อผลงาน</div></div>
       <div class="field"><label>ลิงก์ผลงาน (ถ้ามี)</label><input name="work_link" placeholder="https://... (เช่น ลิงก์ Google ไดรฟ์ ถ้ามี)" /></div>
       <div class="field">
@@ -1550,14 +1826,13 @@ function openSubmitWorkForm(lessonId) {
   $('#submitWorkForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const f = e.target;
-    const name = f.elements.student_name.value.trim();
+    const name = f.elements.student_name.value.trim();   // มาจากบัญชีที่ล็อกอิน (ช่อนไว้)
     const title = f.elements.work_title.value.trim();
-    f.elements.student_name.closest('.field').classList.toggle('invalid', !name);
     f.elements.work_title.closest('.field').classList.toggle('invalid', !title);
     if (!name || !title) return;
 
     const payload = {
-      item: { lesson_id: lessonId, student_name: name, work_title: title, work_link: f.elements.work_link.value.trim() }
+      item: { lesson_id: lessonId, student_id: (getStudentInfo().student_id || ''), student_name: name, work_title: title, work_link: f.elements.work_link.value.trim() }
     };
     const btn = f.querySelector('button[type=submit]');
     btn.disabled = true; btn.textContent = 'กำลังส่ง...';
@@ -1567,8 +1842,6 @@ function openSubmitWorkForm(lessonId) {
         payload.mimeType = pickedFile.type;
         payload.filename = pickedFile.name;
       }
-      // จำชื่อไว้ในเครื่องเพื่อความสะดวกครั้งหน้า
-      saveStudentInfo({ student_name: name, student_class: info.student_class || '', student_no: info.student_no || '' });
       await apiPost('submitWork', payload);
       closeModal();
       toast('ส่งผลงานแล้ว 🎉 รอคุณครูอนุมัติเพื่อแสดงนะ', 'success');
@@ -1607,34 +1880,13 @@ function nonEmbedNote() {
     </section>`;
 }
 
-// ฟอร์มกรอกชื่อ (ใช้ทั้งก่อนเริ่มดู และตอนดูจบ) — เติมข้อมูลเดิมจากเครื่องให้อัตโนมัติ
-function identityFormHtml(submitLabel) {
-  const info = getStudentInfo();
+// กล่องชวนเข้าสู่ระบบ/สมัครสมาชิก (ใต้วิดีโอ) — แทนการพิมพ์ชื่อเอง เพื่อข้อมูลที่เชื่อถือได้
+function loginPromptHtml() {
   return `
-    <form id="idForm" class="vg-form" novalidate>
-      <div class="field"><label>ชื่อ-นามสกุล <span class="req">*</span></label><input name="student_name" value="${esc(info.student_name || '')}" placeholder="เช่น เด็กหญิงมานี ใจดี" /><div class="err">กรุณากรอกชื่อ-นามสกุล</div></div>
-      <div class="row2">
-        <div class="field"><label>ชั้น/ห้อง</label><input name="student_class" value="${esc(info.student_class || '')}" placeholder="เช่น ป.6/1" /></div>
-        <div class="field"><label>เลขที่</label><input name="student_no" value="${esc(info.student_no || '')}" placeholder="เช่น 12" /></div>
-      </div>
-      <button type="submit" class="btn btn-primary btn-block">${esc(submitLabel)}</button>
-    </form>`;
-}
-function wireIdentityForm(after) {
-  const f = document.getElementById('idForm');
-  if (!f) return;
-  f.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const name = f.elements.student_name.value.trim();
-    f.elements.student_name.closest('.field').classList.toggle('invalid', !name);
-    if (!name) return;
-    saveStudentInfo({
-      student_name: name,
-      student_class: f.elements.student_class.value.trim(),
-      student_no: f.elements.student_no.value.trim()
-    });
-    if (after) after();
-  });
+    <div class="vg-login">
+      <button type="button" class="btn btn-primary" onclick="openStudentLogin()">👤 เข้าสู่ระบบ</button>
+      <button type="button" class="btn btn-accent" onclick="openStudentRegister()">📝 สมัครสมาชิก</button>
+    </div>`;
 }
 
 // สร้างตัวเล่น YouTube + ติดตามการดูจริง (กันลากข้าม) เพื่อออกเกียรติบัตรเมื่อดูครบเกณฑ์
@@ -1683,10 +1935,9 @@ function initVideoPlayer(lesson, ytId, threshold) {
       return;
     }
 
-    if (!getStudentInfo().student_name) {
-      if (hint) hint.textContent = 'กรอกชื่อก่อนเริ่มดู เพื่อให้ระบบบันทึกและออกเกียรติบัตรให้ (บุคคลทั่วไปไม่ต้องกรอกก็ดูได้)';
-      gate.innerHTML = identityFormHtml('▶️ เริ่มดูเพื่อรับเกียรติบัตร');
-      wireIdentityForm(() => renderGate());   // กรอกชื่อแล้ว เริ่มนับเครดิตให้
+    if (!isLoggedIn()) {
+      if (hint) hint.textContent = 'เข้าสู่ระบบก่อนเริ่มดู เพื่อให้ระบบบันทึกและออกเกียรติบัตรให้ (บุคคลทั่วไปดูได้โดยไม่ต้องเข้าสู่ระบบ แต่จะไม่ได้เกียรติบัตร)';
+      gate.innerHTML = loginPromptHtml();
       return;
     }
 
@@ -1697,11 +1948,12 @@ function initVideoPlayer(lesson, ytId, threshold) {
   function onReachComplete() {
     if (completed || postWatchStarted) return;
     postWatchStarted = true;          // ★ เข้าขั้นตอนหลังดูจบแค่ครั้งเดียว
-    if (!getStudentInfo().student_name) {
-      // ดูจบแล้วแต่ยังไม่กรอกชื่อ -> ขอให้กรอกก่อน
+    if (!isLoggedIn()) {
+      // ดูจบแล้วแต่ยังไม่ได้เข้าสู่ระบบ -> ชวนเข้าสู่ระบบ (บันทึกให้ไม่ได้ถ้าไม่รู้ตัวตน)
       const gate = byId('videoGate'); const hint = byId('vpHint');
-      if (hint) hint.textContent = 'ดูจบแล้ว! กรอกชื่อเพื่อทำแบบทดสอบ/รับเกียรติบัตร';
-      if (gate) { gate.innerHTML = identityFormHtml('✅ ถัดไป'); wireIdentityForm(() => handleAfterWatch()); }
+      if (hint) hint.textContent = 'ดูจบแล้ว! เข้าสู่ระบบเพื่อบันทึกและรับเกียรติบัตร';
+      if (gate) gate.innerHTML = loginPromptHtml();
+      postWatchStarted = false;       // เผื่อเข้าสู่ระบบเสร็จแล้วกลับมาดูต่อ/นับใหม่ได้
       return;
     }
     handleAfterWatch();
@@ -1774,9 +2026,11 @@ function initVideoPlayer(lesson, ytId, threshold) {
     try {
       const res = await apiPost('submitQuiz', {
         lesson_id: lesson.id,
+        student_id: info.student_id || '',
         student_name: info.student_name,
         student_class: info.student_class || '',
         student_no: info.student_no || '',
+        school: info.school || '',
         lesson_name: lesson.lesson_name || '',
         answers
       });
@@ -1801,9 +2055,11 @@ function initVideoPlayer(lesson, ytId, threshold) {
     const info = getStudentInfo();
     const item = {
       lesson_id: lesson.id,
+      student_id: info.student_id || '',
       student_name: info.student_name,
       student_class: info.student_class || '',
       student_no: info.student_no || '',
+      school: info.school || '',
       lesson_name: lesson.lesson_name || '',
       percent: Math.max(pct(), threshold),
       status: 'completed'
@@ -2058,7 +2314,7 @@ function renderRoster(lessonId, list) {
         return `
         <div class="roster-row">
           <span class="r-no">${i + 1}</span>
-          <span class="r-name">${esc(v.student_name || '-')}</span>
+          <span class="r-name">${esc(v.student_name || '-')}${v.student_id ? ' <span title="สมาชิกที่ล็อกอิน">✔️</span>' : ''}${v.school ? `<div class="member-sub">${esc(v.school)}</div>` : ''}</span>
           <span>${esc(v.student_class || '-')}</span>
           <span>${esc(v.student_no || '-')}</span>
           <span class="r-status">${statusHtml}</span>
