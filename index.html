@@ -34,7 +34,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet" />
 
   <!-- ไฟล์สไตล์ของเรา -->
-  <link rel="stylesheet" href="style.css?v=26" />
+  <link rel="stylesheet" href="style.css?v=28" />
   <link rel="icon" href="favicon-64.png" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>" />
 
@@ -358,8 +358,26 @@
   <!-- ===================== กล่องแจ้งเตือน (Toast) ===================== -->
   <div class="toast-wrap" id="toastWrap"></div>
 
+  <!-- ★ ปุ่มเลื่อนขึ้นบนสุด (โผล่เมื่อเลื่อนลงมาพอสมควร) -->
+  <button class="scroll-top" id="scrollTop" aria-label="เลื่อนขึ้นบนสุด" title="ขึ้นบนสุด">↑</button>
+  <script>
+    (function () {
+      var btn = document.getElementById('scrollTop');
+      if (!btn) return;
+      function onScroll() {
+        if (window.scrollY > 320) btn.classList.add('show');
+        else btn.classList.remove('show');
+      }
+      window.addEventListener('scroll', onScroll, { passive: true });
+      btn.addEventListener('click', function () {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      onScroll();
+    })();
+  </script>
+
   <!-- ไฟล์ JavaScript หลัก (ใส่ไว้ท้ายสุดเพื่อให้โหลดหน้าก่อน) -->
-  <script src="script.js?v=26"></script>
+  <script src="script.js?v=28"></script>
 
   <!-- ===================== ลงทะเบียน Service Worker (ทำให้ติดตั้งเป็นแอปได้) ===================== -->
   <script>
