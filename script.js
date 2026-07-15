@@ -384,6 +384,8 @@ function viewError(msg) {
    9) เราเตอร์ — ดูค่าใน URL (#) แล้วเลือกหน้าที่จะแสดง
    ============================================================================ */
 async function router() {
+  // #6 ทรานสิชันสลับหน้า: รีสตาร์ทอนิเมชันจาง+เลื่อนขึ้นทุกครั้งที่เปลี่ยนหน้า
+  if (app) { app.classList.remove('route-in'); void app.offsetWidth; app.classList.add('route-in'); }
   const params = new URLSearchParams(location.hash.slice(1));
   if (params.get('view') === 'settings') return renderSettings();
   if (params.get('view') === 'me') return renderMyPage();
@@ -1743,20 +1745,27 @@ function findLessonInCache(lessonId) {
 // การ์ดผลงาน 1 ใบ
 function workCard(w, i) {
   const img = imgUrl(w.image);
-  const imgHtml = img ? `<img src="${esc(img)}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='🖼️'" />` : '🖼️';
   const pending = (w.status || 'approved') === 'pending';
-  const inner = `
-    <div class="work-img">${pending ? '<span class="work-pending-tag">⏳ รออนุมัติ</span>' : ''}${imgHtml}</div>
+  // รูปผลงาน: ถ้ามีรูป กดเพื่อดูขนาดเต็ม (ป็อปอัพ), ถ้าไม่มีก็โชว์ไอคอน
+  const imgArea = img
+    ? `<div class="work-img is-clickable" data-full="${esc(img)}" data-title="${esc(w.work_title || 'ผลงาน')}" data-by="${esc(w.student_name || '')}" onclick="openImageLightbox(this)" title="กดเพื่อดูรูปเต็ม">
+         ${pending ? '<span class="work-pending-tag">⏳ รออนุมัติ</span>' : ''}
+         <img src="${esc(img)}" alt="" loading="lazy" onerror="this.parentNode.classList.remove('is-clickable');this.parentNode.innerHTML='🖼️'" />
+         <span class="work-zoom">🔍</span>
+       </div>`
+    : `<div class="work-img">${pending ? '<span class="work-pending-tag">⏳ รออนุมัติ</span>' : ''}🖼️</div>`;
+
+  // ชื่อผลงาน: ถ้ามีลิงก์ผลงานให้กดไปที่ลิงก์ได้
+  const info = `
     <div class="work-info">
-      <div class="t">${esc(w.work_title || 'ผลงาน')}</div>
+      <div class="t">${w.work_link ? `<a href="${esc(w.work_link)}" target="_blank" rel="noopener">${esc(w.work_title || 'ผลงาน')} ↗</a>` : esc(w.work_title || 'ผลงาน')}</div>
       <div class="by">โดย ${esc(w.student_name || '-')}</div>
     </div>`;
-  const linked = w.work_link
-    ? `<a href="${esc(w.work_link)}" target="_blank" rel="noopener">${inner}</a>`
-    : inner;
+
   return `
     <div class="work-card ${pending ? 'is-pending' : ''}" style="animation-delay:${i * 50}ms">
-      ${linked}
+      ${imgArea}
+      ${info}
       <div class="work-tools">
         ${pending ? `<button class="btn btn-primary btn-sm" onclick="approveWork('${esc(w.id)}','${esc(w.lesson_id)}')">✅ อนุมัติ</button>` : ''}
         <button class="btn btn-outline btn-sm" onclick="openWorkForm('${esc(w.id)}','${esc(w.lesson_id)}')">✏️</button>
@@ -1764,6 +1773,35 @@ function workCard(w, i) {
       </div>
     </div>`;
 }
+
+// ★ ป็อปอัพดูรูปผลงานขนาดเต็ม (กดกากบาท/พื้นดำ/Esc เพื่อปิด)
+function openImageLightbox(el) {
+  const full = el.getAttribute('data-full');
+  const title = el.getAttribute('data-title') || '';
+  const by = el.getAttribute('data-by') || '';
+  if (!full) return;
+  const old = document.getElementById('imgLightbox');
+  if (old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'imgLightbox';
+  ov.className = 'img-lightbox';
+  ov.innerHTML = `
+    <button class="ilb-close" onclick="closeImageLightbox()" aria-label="ปิด">✕</button>
+    <div class="ilb-inner" onclick="event.stopPropagation()">
+      <img class="ilb-img" src="${esc(full)}" alt="${esc(title)}" />
+      ${(title || by) ? `<div class="ilb-caption"><b>${esc(title)}</b>${by ? ' · โดย ' + esc(by) : ''}</div>` : ''}
+    </div>`;
+  ov.addEventListener('click', closeImageLightbox);   // กดพื้นดำรอบ ๆ = ปิด
+  document.body.appendChild(ov);
+  document.body.classList.add('lightbox-open');
+}
+function closeImageLightbox() {
+  const o = document.getElementById('imgLightbox');
+  if (o) o.remove();
+  document.body.classList.remove('lightbox-open');
+}
+// กด Esc เพื่อปิดป็อปอัพรูป
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeImageLightbox(); });
 
 // ครูอนุมัติผลงาน
 async function approveWork(id, lessonId) {
